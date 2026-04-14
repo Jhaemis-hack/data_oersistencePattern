@@ -24,6 +24,7 @@ async def safe_http_request(
                 headers=headers,
             )
             response.raise_for_status()
+            
             return response.json()
 
     except httpx.RequestError as e:

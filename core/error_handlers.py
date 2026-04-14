@@ -12,8 +12,8 @@ def register_error_handlers(app: FastAPI):
         return JSONResponse(
             status_code=exc.status_code,
             content={
-                "success": False,
-                "error": exc.message,
+                "status": "error",
+                "message": exc.message,
             },
         )
 
@@ -33,8 +33,8 @@ def register_error_handlers(app: FastAPI):
         return JSONResponse(
             status_code=exc.status_code,
             content={
-                "success": False,
-                "error": exc.detail,
+                "status": "error",
+                "message": exc.detail,
             },
         )
 
@@ -44,8 +44,8 @@ def register_error_handlers(app: FastAPI):
         return JSONResponse(
             status_code=500,
             content={
-                "success": False,
-                "error": "Internal server error",
+                "status": "Error",
+                "message": "Internal server error",
             },
         )
 
@@ -66,7 +66,7 @@ async def conditional_validation_handler(request: Request, exc: RequestValidatio
             status_code=400,
             content={
                 "success": False,
-                "error": 'Invalid request body or missing "value" field',
+                "error": 'Missing or empty name parameter.',
                 "details": errors,
             },
         )

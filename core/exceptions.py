@@ -25,6 +25,10 @@ class BadRequestException(AppException):
 class ConflictException(AppException):
     def __init__(self, message: str = "Bad request"):
         super().__init__(message, status.HTTP_409_CONFLICT)
+        
+class UnprocessableException(AppException):
+    def __init__(self, message: str = "Unprocessable Content"):
+        super().__init__(message, status.HTTP_422_UNPROCESSABLE_CONTENT)
 
 
 class ExternalServiceException(AppException):

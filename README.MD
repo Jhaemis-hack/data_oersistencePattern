@@ -1,199 +1,257 @@
-# String Analysis API
+# Gender Analyzer API
 
-A **FastAPI**-powered RESTful service that allows users to submit, analyze, retrieve, and manage strings with rich metadata, such as SHA256 hashes, palindrome detection, word count, and character frequency mapping.
-
----
-
-## Features
-
-- **Store and Retrieve Strings:** Save unique strings and retrieve their computed properties.  
-- **String Properties:** Automatically calculates length, palindrome status, word count, character frequency, and SHA256 hash.  
-- **Filtering:** Filter stored strings based on multiple criteria such as length, palindrome status, character inclusion, etc.  
-- **Rate Limiting:** Protects routes using `slowapi` to prevent abuse (default: 8 requests per minute).  
-- **Custom Exceptions:** Includes clean and descriptive error messages with proper status codes.  
-- **In-Memory Database:** Uses a simple Python list (`StringDB`) to simulate a temporary database.  
+A lightweight, production-ready RESTful API built with FastAPI that analyzes names and predicts gender-related properties using the external `genderize.io` service.
 
 ---
 
-## Tech Stack
+## 🚀 Overview
 
-| Layer | Technology |
-|--------|-------------|
-| Backend Framework | FastAPI |
-| Rate Limiting | slowapi |
-| Security | helmet, CORS |
-| HTTP Server | Uvicorn |
-| Data Handling | Pydantic Models |
+This API provides a simple endpoint to classify names and return:
+
+* Gender prediction
+* Probability score
+* Sample size used for prediction
+* Confidence indicator
+* Timestamp of processing
+
+It also includes:
+
+* Rate limiting
+* Custom error handling
+* Input validation
+* CORS configuration
+* Health check endpoint
 
 ---
 
-##  Installation and Setup
+## 🧱 Tech Stack
 
-### 1. Clone the Repository
+* Python 3.10+
+* FastAPI
+* SlowAPI (Rate limiting)
+* Uvicorn (ASGI server)
 
-```bash
-git clone https://github.com/your-username/string-analysis-api.git
-cd string-analysis-api
+---
+
+## 📁 Project Structure (Simplified)
+
+```
+.
+├── main.py
+├── core/
+│   ├── config.py
+│   ├── exceptions.py
+│   └── error_handlers.py
+├── services/
+│   └── fetch_name_data.py
+└── requirements.txt
 ```
 
-### 2. Create a Virtual Environment
+---
 
-```bash
+## ⚙️ Installation
+
+### 1. Clone the repository
+
+```
+git clone <your-repo-url>
+cd <your-project>
+```
+
+### 2. Create virtual environment
+
+```
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate   # Linux/macOS
+venv\\Scripts\\activate    # Windows
 ```
 
-### 3. Install Dependencies
+### 3. Install dependencies
 
-```bash
+```
 pip install -r requirements.txt
 ```
 
-Example `requirements.txt` content:
+---
+
+## ▶️ Running the Application
+
+Start the development server:
+
 ```
-fastapi
-uvicorn
-slowapi
-pydantic
-python-dotenv
+uvicorn main:app --reload
 ```
 
-### 4. Run the Server
+The API will be available at:
 
-```bash
-uvicorn main:app --reload --port 8080
+```
+http://127.0.0.1:8000
 ```
 
-Your API will be live at:
+Interactive docs:
+
 ```
-http://127.0.0.1:8080
+http://127.0.0.1:8000/docs
 ```
 
 ---
 
-## API Documentation
+## 📡 API Endpoints
 
-FastAPI automatically generates documentation for you:
+### 1. Home
 
-- **Swagger UI:** [http://127.0.0.1:8080/docs](http://127.0.0.1:8080/docs)
-- **ReDoc:** [http://127.0.0.1:8080/redoc](http://127.0.0.1:8080/redoc)
+```
+GET /
+```
 
----
+Response:
 
-## Endpoints Overview
-
-### 1. **POST /strings**
-Store a new string and compute its metadata.
-
-#### Example Request
 ```json
 {
-  "value": "boob"
-}
-```
-
-#### Example Response
-```json
-{
-  "id": "e99d55248f67be7623332be8dabcd143ce2495eb923860b4ed0d963621ece901",
-  "value": "boob",
-  "properties": {
-    "length": 4,
-    "is_palindrome": true,
-    "unique_characters": 0,
-    "word_count": 4,
-    "sha256_hash": "e99d55248f67be7623332be8dabcd143ce2495eb923860b4ed0d963621ece901",
-    "character_frequency_map": {
-      "b": 2,
-      "o": 2
-    }
-  },
-  "created_at": "2025-10-22T18:12:30.354308Z"
-}
-```
-
----
-
-### 2. **GET /strings**
-Filter stored strings based on query parameters.
-
-#### Example Query
-```
-/strings?is_palindrome=true&min_length=2&max_length=6&word_count=5&contains_character=b
-```
-
-#### Example Response
-```json
-{
-  "data": [
-    {
-      "id": "e99d55248f67be7623332be8dabcd143ce2495eb923860b4ed0d963621ece901",
-      "value": "boob",
-      "properties": {
-        "length": 4,
-        "is_palindrome": true,
-        "unique_characters": 0,
-        "word_count": 4,
-        "sha256_hash": "e99d55248f67be7623332be8dabcd143ce2495eb923860b4ed0d963621ece901",
-        "character_frequency_map": {
-          "b": 2,
-          "o": 2
-        }
-      },
-      "created_at": "2025-10-22T18:12:30.354308Z"
-    }
-  ],
-  "count": 1,
-  "filters_applied": {
-    "is_palindrome": true,
-    "min_length": 2,
-    "max_length": 6,
-    "word_count": 5,
-    "contains_character": "b"
+  "success": true,
+  "message": {
+    "title": "Gender Analyzer",
+    "about": "REST API for analyzing name-based gender"
   }
 }
 ```
 
 ---
 
-### 3. **DELETE /strings/{string_value}**
-Deletes a string entry if it exists.
+### 2. Health Check
 
-#### Example
 ```
-DELETE /strings/boob
+GET /health
 ```
 
-#### Response
-```
-204 No Content
+Response:
+
+```json
+{
+  "success": true,
+  "message": "Ok"
+}
 ```
 
 ---
 
-##  Error Handling
+### 3. Classify Name
 
-The API uses a consistent error response model for validation and runtime errors.
+```
+GET /api/classify?name=John
+```
 
-| Error | HTTP Code | Description |
-|--------|------------|-------------|
-| `NotFoundException` | 404 | When the string or query result is not found |
-| `ValidationError` | 400 | When a required field is missing or invalid |
-| `RateLimitExceeded` | 429 | When request frequency exceeds allowed limit |
+#### Query Parameters
+
+| Parameter | Type   | Required | Description     |
+| --------- | ------ | -------- | --------------- |
+| name      | string | Yes      | Name to analyze |
+
+#### Success Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "name": "john",
+    "gender": "male",
+    "probability": 0.99,
+    "sample_size": 12345,
+    "is_confident": true,
+    "processed_at": "2026-01-01T00:00:00Z"
+  }
+}
+```
 
 ---
 
-## Notes
+## ⛔ Error Handling
 
-- This project uses **in-memory storage**, meaning all data resets when the server restarts.
-- You can extend this API by integrating a database like **MongoDB** or **PostgreSQL**.
-- Modify the `StringDB` list to connect with your preferred data persistence layer.
+The API uses structured error responses:
+
+| Status Code | Description                         |
+| ----------- | ----------------------------------- |
+| 400         | Bad Request (missing or empty name) |
+| 404         | Name not found                      |
+| 422         | Invalid input                       |
+| 429         | Rate limit exceeded                 |
+| 500         | Internal server error               |
+| 502         | Bad Gateway                         |
+
+Example:
+
+```json
+{
+  "Status": "error",
+  "message": "Too many requests, please slow down."
+}
+```
 
 ---
 
-## Author
+## 🚦 Rate Limiting
 
-**James Kehinde**  
-Built with ❤️ using FastAPI  
-[GitHub](https://github.com/your-username)
+* Endpoint: `/api/classify`
+* Limit: **8 requests per minute per IP**
+
+---
+
+## 🔍 Input Validation Logic
+
+* Removes non-alphabetic characters
+* Converts input to lowercase
+* Rejects empty or invalid strings
+
+---
+
+## 🔄 Lifecycle Events
+
+The app uses FastAPI lifespan events:
+
+* Startup: Initializes rate limiter
+* Shutdown: Graceful cleanup logging
+
+---
+
+## 🌐 CORS Configuration
+
+Currently configured to allow all origins:
+
+```python
+allow_origins = ["*"]
+```
+
+⚠️ For production, restrict this to trusted domains.
+
+---
+
+## 🧪 Example Request
+
+```
+curl "http://127.0.0.1:8000/api/classify?name=Amaka"
+```
+
+---
+
+## 🛠️ Future Improvements
+
+* Add caching layer (Redis)
+* Add authentication (API keys)
+* Improve confidence scoring logic
+* Logging & monitoring (Prometheus/Grafana)
+
+---
+
+## 📄 License
+
+MIT License
+
+---
+
+## 👨‍💻 Author
+
+James Kehinde
+
+---
+
 
