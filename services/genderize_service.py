@@ -2,7 +2,7 @@ from services.http_client import safe_http_request
 from functools import lru_cache
 from core import config
 from typing import Any
-from core.exceptions import  BadRequestException
+from core.exceptions import  BadRequestException, ExternalServiceException
 
 
 @lru_cache
@@ -10,7 +10,7 @@ def get_settings():
     return config.Settings()
 
 
-async def fetch_name_properties(name: str):
+async def fetch_genderize_property(name: str):
     settings = get_settings()
     
     if settings is None:
@@ -24,21 +24,15 @@ async def fetch_name_properties(name: str):
     gender = properties["gender"]
     prob = properties["probability"]
     
-    if gender == None and count == 0:
-        return {
-            "success": False,
-            "message": "No prediction available for the provided name"
-        }
+    if gender == None or count == 0:
+        raise ExternalServiceException("Genderize returned an invalid response")
         
-    is_confident = count >=100 and prob >=0.7
     
     data = {
-        "success": True,
         "name": name,
         "gender": gender,
-        "probability": prob,
+        "gender_probability": prob,
         "sample_size": count,
-        "is_confident": is_confident,
     }
 
     return data

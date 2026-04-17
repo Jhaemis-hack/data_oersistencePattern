@@ -11,66 +11,33 @@ def register_error_handlers(app: FastAPI):
     async def app_exception_handler(request: Request, exc: AppException):
         return JSONResponse(
             status_code=exc.status_code,
-            content={
-                "status": "error",
-                "message": exc.message,
-            },
-        )
-
-    @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        return JSONResponse(
-            status_code=422,
-            content={
-                "success": False,
-                "error": "Validation failed",
-                "details": exc.errors(),
-            },
+            content={"status": "error", "message": exc.message},
         )
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         return JSONResponse(
             status_code=exc.status_code,
-            content={
-                "status": "error",
-                "message": exc.detail,
-            },
+            content={"status": "error", "message": exc.detail},
         )
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
-        # For unexpected exceptions
         return JSONResponse(
             status_code=500,
-            content={
-                "status": "Error",
-                "message": "Internal server error",
-            },
+            content={"status": "error", "message": "Internal server error"},
         )
 
 
-async def conditional_validation_handler(request: Request, exc: RequestValidationError):
-    # Inspect all errors raised by Pydantic
+async def validation_error_handler(request: Request, exc: RequestValidationError):
     errors = exc.errors()
-
-    # Check if the "value" field was missing
-    missing_value_error = any(
-        err.get("loc")[-1] == "value" and err.get("type") == "missing"
-        for err in errors
+    for err in errors:
+        if err.get("type") == "missing" and "name" in err.get("loc", []):
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "Missing or empty name"},
+            )
+    return JSONResponse(
+        status_code=422,
+        content={"status": "error", "message": "Invalid type"},
     )
-
-    if missing_value_error:
-        # Override only this case to 400
-        return JSONResponse(
-            status_code=400,
-            content={
-                "success": False,
-                "error": 'Missing or empty name parameter.',
-                "details": errors,
-            },
-        )
-
-    # For all other validation errors, keep default FastAPI behavior (422)
-    from fastapi.exception_handlers import request_validation_exception_handler
-    return await request_validation_exception_handler(request, exc)

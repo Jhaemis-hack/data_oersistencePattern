@@ -1,124 +1,164 @@
 import re
-from collections import Counter
+import asyncio
 from datetime import datetime, timezone
-from fastapi import FastAPI, Request, Response, Depends, Query
-from datetime import datetime, timezone
+from fastapi import FastAPI, Request, Response, Query
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from core.error_handlers import register_error_handlers, conditional_validation_handler
 from fastapi.exceptions import RequestValidationError
-from services.fetch_name_data import fetch_name_properties
+from core.error_handlers import register_error_handlers, validation_error_handler
+from services.genderize_service import fetch_genderize_property
+from services.agify_service import fetch_Agify_property
+from services.nationalize_service import fetch_nationalize_property
 from core.exceptions import NotFoundException, BadRequestException, UnprocessableException
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from functools import lru_cache
-from typing_extensions import Annotated
 from core import config
+from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
+from config.database import collection
+from config.model import extract_gender, create_profile, create_profile_list_item
+import uuid
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    print("App starting up...")
-    await startup_event()
+    app.state.limiter = limiter
     yield
-    # Shutdown
-    print("App shutting down...")
 
 
 limiter = Limiter(key_func=get_remote_address)
 
-app = FastAPI(lifespan=lifespan, title="My Profile App")
+app = FastAPI(lifespan=lifespan, title="Classification App")
 register_error_handlers(app)
 
-# Register exception handlers
+app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(RateLimitExceeded, lambda request, exc: JSONResponse(
     status_code=429,
-    content={"success": False, "error": "Too many requests, please slow down."},
+    content={"status": "error", "message": "Too many requests, please slow down."},
 ))
-app.add_exception_handler(RequestValidationError, conditional_validation_handler)
 
 
 @lru_cache
 def get_settings():
-    return config.Settings()    
+    return config.Settings()
 
-
-# Initialize the limiter
-async def startup_event():
-    app.state.limiter = limiter
-
-
-origins = [
-    "*",
-]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+class Payload(BaseModel):
+    name: str = Field(..., description="A non-empty string value")
+
+
 @app.get("/")
 async def home():
     return JSONResponse(content={
-        "success": True,
+        "status": "success",
         "message": {
-            "title": "Gender Analyzer",
-            "about": "This is a RESTful API service that fetches and anlayze Name based property from genderize.io."
+            "title": "Classification App",
+            "about": "A RESTful API that predicts gender, age, and nationality from a name.",
         }
-    }, status_code=200, media_type="application/json")
+    }, status_code=200)
 
 
 @app.get("/health")
 async def health_check():
-    return JSONResponse(content={
-        "success": True,
-        "message": "Ok"
-    }, status_code=200, media_type="application/json")
+    return JSONResponse(content={"status": "success", "message": "Ok"}, status_code=200)
 
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return Response(status_code=204)
 
+
 @limiter.limit("8/minute")
-@app.get("/api/classify")
-async def analyze_string(request: Request, name: Annotated[str, Query(description="Missing or empty name parameter")]):
-    query_name = name
-    
-    if (query_name == ""):
-        raise BadRequestException("Missing or empty name parameter")
-    
-    parsed_query_name = re.sub(r'[^a-zA-Z]', '', query_name).lower()
-        
-    if (parsed_query_name == ""):
+@app.post("/api/profiles")
+async def create_new_profile(request: Request, body: Payload):
+    profile_name = body.name
+
+    if profile_name == "":
+        raise BadRequestException("Missing or empty name")
+
+    parsed_name = re.sub(r'[^a-zA-Z]', '', profile_name).lower()
+
+    if parsed_name == "":
         raise UnprocessableException("name is not a string")
-        
-    parsed_query_name = query_name.lower()
 
-    props = await fetch_name_properties(parsed_query_name)
-    
-    if props["success"] == False:
-        raise NotFoundException(props["message"])
-    
-    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    existing = collection.find_one({"name": parsed_name})
+    if existing:
+        return JSONResponse(content={
+            "status": "success",
+            "message": "Profile already exists",
+            "data": create_profile(existing),
+        }, status_code=200)
 
-    data = {
-        "status": "success",
-        "data": {
-            "name": props["name"],
-            "gender": props["gender"],
-            "probability": props["probability"],
-            "sample_size": props["sample_size"],
-            "is_confident": props["is_confident"],
-            "processed_at": now_iso
-        }
+    genderize_response, nationalize_response, agify_response = await asyncio.gather(
+        fetch_genderize_property(parsed_name),
+        fetch_nationalize_property(parsed_name),
+        fetch_Agify_property(parsed_name),
+    )
+
+    profile_id = str(uuid.uuid7())
+    created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    doc = {
+        "id": profile_id,
+        **extract_gender(genderize_response, nationalize_response, agify_response),
+        "created_at": created_at,
     }
 
-    return JSONResponse(content=data, status_code=200, media_type="application/json")
+    collection.insert_one(doc)
+
+    return JSONResponse(content={
+        "status": "success",
+        "data": create_profile(doc),
+    }, status_code=201)
+
+
+@app.get("/api/profiles")
+async def get_all_profiles(
+    gender: str | None = Query(default=None),
+    country_id: str | None = Query(default=None),
+    age_group: str | None = Query(default=None),
+):
+    query = {}
+    if gender:
+        query["gender"] = gender.lower()
+    if country_id:
+        query["country_id"] = country_id.upper()
+    if age_group:
+        query["age_group"] = age_group.lower()
+
+    docs = list(collection.find(query))
+    return JSONResponse(content={
+        "status": "success",
+        "count": len(docs),
+        "data": [create_profile_list_item(d) for d in docs],
+    }, status_code=200)
+
+
+@app.get("/api/profiles/{profile_id}")
+async def get_profile(profile_id: str):
+    doc = collection.find_one({"id": profile_id})
+    if not doc:
+        raise NotFoundException("Profile not found")
+    return JSONResponse(content={
+        "status": "success",
+        "data": create_profile(doc),
+    }, status_code=200)
+
+
+@app.delete("/api/profiles/{profile_id}")
+async def delete_profile(profile_id: str):
+    result = collection.delete_one({"id": profile_id})
+    if result.deleted_count == 0:
+        raise NotFoundException("Profile not found")
+    return Response(status_code=204)

@@ -5,3 +5,5 @@ httpx[http2]
 uvicorn[standard]
 python-dotenv
 typing-extensions
+uuid6
+pymongo[srv]
